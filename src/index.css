@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+}
+
+/* Facebook Light & Dark Mode Variables */
+:root {
+  --fb-blue: #1877f2;
+  --fb-blue-dark: #0d47a1;
+  --fb-blue-light: #e7f3ff;
+  --fb-bg: #f0f2f5;
+  --fb-card: #ffffff;
+  --fb-hover: #e4e6eb;
+  --fb-text-primary: #050505;
+  --fb-text-secondary: #65676b;
+  --fb-border: #ced0d4;
+  --learning-yellow: #f59e0b;
+  --learning-blue: #2563eb;
+  --learning-green: #10b981;
+  --learning-red: #ef4444;
+}
+
+.dark {
+  --fb-bg: #18191a;
+  --fb-card: #242526;
+  --fb-hover: #3a3b3c;
+  --fb-text-primary: #e4e6eb;
+  --fb-text-secondary: #b0b3b8;
+  --fb-border: #3e4042;
+}
+
+/* Custom scrollbars matching Facebook */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 150, 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 150, 0.6);
+}

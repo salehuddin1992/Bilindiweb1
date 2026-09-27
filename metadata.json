@@ -1,0 +1,6 @@
+{
+  "name": "BilindiWall - Platform Belajar Siswa SMP",
+  "description": "Platform belajar interaktif digital siswa dan guru bergaya Facebook dengan tata letak lanskap 3 kolom, modul ajar terstruktur, reels edukasi, dan tugas asesmen.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
