@@ -8,9 +8,13 @@ import {
   Check,
   CheckCheck,
   User as UserIcon,
+  Paperclip,
+  Loader2,
+  X,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { User, DirectMessage } from '../../types';
+import { SupabaseSyncService } from '../../services/supabaseSyncService';
 
 export const MessengerView: React.FC = () => {
   const {
@@ -32,6 +36,23 @@ export const MessengerView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'ALL' | 'TEACHER' | 'STUDENT'>('ALL');
   const [inputText, setInputText] = useState('');
+  const [attachedImage, setAttachedImage] = useState<string | null>(null);
+  const [isUploadingChat, setIsUploadingChat] = useState(false);
+
+  const handleChatFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingChat(true);
+    try {
+      const url = await SupabaseSyncService.instance.uploadMedia(file, 'chats');
+      setAttachedImage(url);
+    } catch (err) {
+      console.error('Gagal mengunggah gambar chat:', err);
+    } finally {
+      setIsUploadingChat(false);
+    }
+  };
 
   // Get active contacts excluding current user
   const otherUsers = Object.values(users).filter((u) => u.id !== currentUser?.id);
@@ -63,10 +84,15 @@ export const MessengerView: React.FC = () => {
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() || !selectedContact) return;
+    if ((!inputText.trim() && !attachedImage) || !selectedContact) return;
 
-    sendDirectMessage(selectedContact.id, inputText.trim());
+    sendDirectMessage(
+      selectedContact.id,
+      inputText.trim() || (attachedImage ? '📷 Mengirim gambar' : ''),
+      attachedImage || undefined
+    );
     setInputText('');
+    setAttachedImage(null);
   };
 
   const handleSelectContact = (contact: User) => {
@@ -306,25 +332,62 @@ export const MessengerView: React.FC = () => {
           </div>
 
           {/* Input Footer */}
-          <form
-            onSubmit={handleSendMessage}
-            className="p-3 border-t border-slate-200 dark:border-[#3e4042] bg-white dark:bg-[#242526] flex items-center gap-2"
-          >
-            <input
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder="Tulis pesan..."
-              className="flex-1 bg-slate-100 dark:bg-[#3a3b3c] text-xs sm:text-sm text-slate-900 dark:text-white px-4 py-2.5 rounded-full border border-transparent focus:border-[#1877F2] focus:outline-hidden"
-            />
-            <button
-              type="submit"
-              disabled={!inputText.trim()}
-              className="p-2.5 rounded-full bg-[#1877F2] text-white hover:bg-[#166fe5] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          <div className="border-t border-slate-200 dark:border-[#3e4042] bg-white dark:bg-[#242526]">
+            {/* Attached Image Preview */}
+            {attachedImage && (
+              <div className="p-2.5 px-4 flex items-center gap-3 bg-slate-50 dark:bg-[#18191a] border-b border-slate-100 dark:border-[#3a3b3c]">
+                <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700">
+                  <img src={attachedImage} alt="Lampiran" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setAttachedImage(null)}
+                    className="absolute top-0.5 right-0.5 p-0.5 bg-black/70 hover:bg-black text-white rounded-full"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+                <span className="text-xs text-slate-600 dark:text-slate-400 font-medium truncate">
+                  Gambar siap dikirim bersama pesan
+                </span>
+              </div>
+            )}
+
+            <form
+              onSubmit={handleSendMessage}
+              className="p-3 flex items-center gap-2"
             >
-              <Send className="w-4 h-4" />
-            </button>
-          </form>
+              {/* Tombol Unggah Foto / Berkas dari Komputer / Galeri */}
+              <label className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-[#3a3b3c] text-slate-500 hover:text-[#1877F2] cursor-pointer transition-colors shrink-0">
+                {isUploadingChat ? (
+                  <Loader2 className="w-5 h-5 animate-spin text-[#1877F2]" />
+                ) : (
+                  <Image className="w-5 h-5" />
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleChatFileUpload}
+                  disabled={isUploadingChat}
+                  className="hidden"
+                />
+              </label>
+
+              <input
+                type="text"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                placeholder="Tulis pesan..."
+                className="flex-1 bg-slate-100 dark:bg-[#3a3b3c] text-xs sm:text-sm text-slate-900 dark:text-white px-4 py-2.5 rounded-full border border-transparent focus:border-[#1877F2] focus:outline-hidden"
+              />
+              <button
+                type="submit"
+                disabled={(!inputText.trim() && !attachedImage) || isUploadingChat}
+                className="p-2.5 rounded-full bg-[#1877F2] text-white hover:bg-[#166fe5] disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </form>
+          </div>
         </div>
       ) : (
         <div className="flex-1 hidden sm:flex flex-col items-center justify-center p-8 text-center text-slate-400">

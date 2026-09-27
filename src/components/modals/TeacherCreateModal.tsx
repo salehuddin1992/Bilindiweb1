@@ -9,10 +9,14 @@ import {
   Image,
   Eye,
   Info,
+  Upload,
+  Loader2,
+  Check,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Post, SectionData, StructuredLearningContent } from '../../types';
 import { PdfPreviewModal } from './PdfPreviewModal';
+import { SupabaseSyncService } from '../../services/supabaseSyncService';
 
 interface TeacherCreateModalProps {
   initialPost?: Post | null;
@@ -93,6 +97,39 @@ export const TeacherCreateModal: React.FC<TeacherCreateModalProps> = ({
 
   // Preview PDF state
   const [pdfPreview, setPdfPreview] = useState<{ title: string; file: string } | null>(null);
+  const [uploadingField, setUploadingField] = useState<string | null>(null);
+
+  const handleFileUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    field: 'header' | 'video' | 'pdf' | 'lkpd' | 'tugas'
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingField(field);
+    try {
+      const url = await SupabaseSyncService.instance.uploadMedia(
+        file,
+        field === 'header' ? 'headers' : field === 'video' ? 'videos' : 'modules'
+      );
+
+      if (field === 'header') {
+        setHeaderMedia((prev) => ({ ...prev, imageUrl: url }));
+      } else if (field === 'video') {
+        setInti((prev) => ({ ...prev, videoUrl: url }));
+      } else if (field === 'pdf') {
+        setInti((prev) => ({ ...prev, pdfName: file.name, pdfUrl: url }));
+      } else if (field === 'lkpd') {
+        setAsesmen((prev) => ({ ...prev, pdfName: file.name, pdfUrl: url }));
+      } else if (field === 'tugas') {
+        setTugasAttachment(file.name);
+      }
+    } catch (err) {
+      console.error('Gagal upload berkas modul:', err);
+    } finally {
+      setUploadingField(null);
+    }
+  };
 
   // Auto-generated hashtag
   const cleanSubject = (currentUser?.subject || 'IPA').replace(/\s+/g, '').slice(0, 4);
@@ -259,6 +296,32 @@ export const TeacherCreateModal: React.FC<TeacherCreateModalProps> = ({
                   </div>
                 </div>
 
+                {/* Banner / Gambar Header Modul */}
+                <div className="p-3.5 bg-slate-50 dark:bg-[#18191a] rounded-xl border border-slate-200 dark:border-[#3e4042] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <Image className="w-4 h-4 text-[#1877F2]" />
+                      <span>Banner / Gambar Sampul Modul:</span>
+                    </label>
+                    <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-[#1877F2] text-white hover:bg-[#166fe5] shadow-xs">
+                      {uploadingField === 'header' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      <span>Unggah Gambar dari Komputer</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleFileUpload(e, 'header')}
+                        disabled={uploadingField === 'header'}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                  {headerMedia.imageUrl && (
+                    <div className="relative w-full h-28 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700">
+                      <img src={headerMedia.imageUrl} alt="Banner" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                </div>
+
                 {/* 1. Pertanyaan Pemantik */}
                 <div className="p-4 rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 space-y-2">
                   <span className="text-xs font-bold text-amber-800 dark:text-amber-400 flex items-center gap-1.5">
@@ -314,23 +377,49 @@ export const TeacherCreateModal: React.FC<TeacherCreateModalProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-0.5">
-                        Link Video YouTube In-App:
-                      </label>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                          Video Materi (MP4 / YouTube):
+                        </label>
+                        <label className="cursor-pointer text-[10px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline flex items-center gap-1">
+                          {uploadingField === 'video' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                          <span>Unggah Video</span>
+                          <input
+                            type="file"
+                            accept="video/*"
+                            onChange={(e) => handleFileUpload(e, 'video')}
+                            disabled={uploadingField === 'video'}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
                       <input
-                        type="url"
+                        type="text"
                         value={inti.videoUrl || ''}
                         onChange={(e) => setInti({ ...inti, videoUrl: e.target.value })}
-                        placeholder="https://www.youtube.com/watch?v=..."
+                        placeholder="Unggah video atau https://..."
                         className="w-full bg-white dark:bg-[#3a3b3c] border border-emerald-200 dark:border-emerald-900 rounded-lg px-2.5 py-1.5 text-xs"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-0.5">
-                      Nama Berkas Modul PDF:
-                    </label>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                        Nama Berkas Modul PDF:
+                      </label>
+                      <label className="cursor-pointer text-[10px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline flex items-center gap-1">
+                        {uploadingField === 'pdf' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                        <span>Unggah Dokumen PDF</span>
+                        <input
+                          type="file"
+                          accept=".pdf"
+                          onChange={(e) => handleFileUpload(e, 'pdf')}
+                          disabled={uploadingField === 'pdf'}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
@@ -456,9 +545,22 @@ export const TeacherCreateModal: React.FC<TeacherCreateModalProps> = ({
 
                 {/* PDF Attachment & Preview */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Lampiran Berkas PDF Panduan Tugas:
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Lampiran Berkas PDF Panduan Tugas:
+                    </label>
+                    <label className="cursor-pointer text-xs font-bold text-[#1877F2] hover:underline flex items-center gap-1">
+                      {uploadingField === 'tugas' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      <span>Unggah dari Komputer</span>
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx"
+                        onChange={(e) => handleFileUpload(e, 'tugas')}
+                        disabled={uploadingField === 'tugas'}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
                   <div className="flex items-center gap-2">
                     <input
                       type="text"

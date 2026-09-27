@@ -40,12 +40,34 @@ export class SupabaseSyncService {
   }
 
   /**
-   * Upload media (images, docs, audio, videos) to Supabase Storage
+   * Helper to convert File to Data URL as fallback if offline/storage unavailable
    */
-  async uploadMedia(file: File | Blob, folder = 'posts'): Promise<string | null> {
+  static fileToDataUrl(file: File | Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /**
+   * Upload media (images, docs, audio, videos) to Supabase Storage with automatic fallback
+   */
+  async uploadMedia(file: File | Blob, folder = 'uploads'): Promise<string> {
     try {
-      const fileExt = file.type.split('/')[1] || 'jpg';
-      const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      let fileExt = 'bin';
+      if ('name' in file && typeof file.name === 'string') {
+        const parts = file.name.split('.');
+        if (parts.length > 1) {
+          fileExt = parts.pop()!.toLowerCase().replace(/[^a-z0-9]/g, '');
+        }
+      } else if (file.type) {
+        fileExt = file.type.split('/')[1]?.split(';')[0]?.toLowerCase() || 'jpg';
+      }
+
+      const randomSuffix = Math.random().toString(36).substring(2, 8);
+      const fileName = `${folder}/${Date.now()}_${randomSuffix}.${fileExt}`;
 
       const { data, error } = await supabase.storage
         .from(BUCKET_NAME)
@@ -54,20 +76,23 @@ export class SupabaseSyncService {
           upsert: true,
         });
 
-      if (error) {
-        console.warn('Storage upload error:', error);
-        return null;
+      if (!error && data) {
+        const { data: publicUrlData } = supabase.storage
+          .from(BUCKET_NAME)
+          .getPublicUrl(fileName);
+
+        if (publicUrlData?.publicUrl) {
+          return publicUrlData.publicUrl;
+        }
+      } else if (error) {
+        console.warn('Supabase storage upload error, using local data URL fallback:', error.message);
       }
-
-      const { data: publicUrlData } = supabase.storage
-        .from(BUCKET_NAME)
-        .getPublicUrl(fileName);
-
-      return publicUrlData.publicUrl;
     } catch (e) {
-      console.error('Failed to upload media to Supabase:', e);
-      return null;
+      console.warn('Failed to upload media to Supabase Storage, using fallback:', e);
     }
+
+    // Fallback: convert file to Base64 data URL so upload is never lost
+    return await SupabaseSyncService.fileToDataUrl(file);
   }
 
   /**

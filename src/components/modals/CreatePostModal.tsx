@@ -1,6 +1,18 @@
 import React, { useState } from 'react';
-import { X, Image, Tag, Lock, Check } from 'lucide-react';
+import {
+  X,
+  Image,
+  Video,
+  FileText,
+  Tag,
+  Lock,
+  Check,
+  Upload,
+  Loader2,
+  Paperclip,
+} from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { SupabaseSyncService } from '../../services/supabaseSyncService';
 
 interface CreatePostModalProps {
   initialHashtag?: string;
@@ -24,13 +36,57 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
   const [content, setContent] = useState('');
   const [hashtag, setHashtag] = useState(initialHashtag);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<{ name: string; url: string; size?: string } | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [targetClass, setTargetClass] = useState(
     isStudent ? currentUser?.className || 'VII-A' : 'Semua Kelas'
   );
 
+  const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const isVid = file.type.startsWith('video/') || /\.(mp4|webm|mov|mkv)$/i.test(file.name);
+      const isDoc = file.type.includes('pdf') || /\.(pdf|doc|docx|ppt|pptx|xls|xlsx)$/i.test(file.name);
+
+      const url = await SupabaseSyncService.instance.uploadMedia(file, isVid ? 'videos' : isDoc ? 'documents' : 'posts');
+
+      if (isVid) {
+        setSelectedVideo(url);
+        setSelectedImage(null);
+        setSelectedFile(null);
+      } else if (isDoc) {
+        setSelectedFile({
+          name: file.name,
+          url,
+          size: `${(file.size / 1024).toFixed(0)} KB`,
+        });
+        setSelectedImage(null);
+        setSelectedVideo(null);
+      } else {
+        setSelectedImage(url);
+        setSelectedVideo(null);
+        setSelectedFile(null);
+      }
+    } catch (err) {
+      console.error('Gagal mengunggah media:', err);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleClearAttachments = () => {
+    setSelectedImage(null);
+    setSelectedVideo(null);
+    setSelectedFile(null);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim() && !selectedImage) return;
+    if (!content.trim() && !selectedImage && !selectedVideo && !selectedFile) return;
 
     let formattedHashtag = hashtag.trim();
     if (formattedHashtag && !formattedHashtag.startsWith('#')) {
@@ -42,6 +98,9 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
       content: content.trim(),
       hashtag: formattedHashtag || undefined,
       imageUrl: selectedImage || undefined,
+      videoUrl: selectedVideo || undefined,
+      pdfUrl: selectedFile?.url || undefined,
+      pdfName: selectedFile?.name || undefined,
       targetClass,
     });
 
@@ -50,9 +109,9 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-      <div className="relative w-full max-w-lg bg-white dark:bg-[#242526] rounded-2xl shadow-2xl border border-slate-200 dark:border-[#3e4042] overflow-hidden">
+      <div className="relative w-full max-w-lg bg-white dark:bg-[#242526] rounded-2xl shadow-2xl border border-slate-200 dark:border-[#3e4042] overflow-hidden max-h-[92vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-[#3e4042]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-[#3e4042] shrink-0">
           <h3 className="text-base font-bold text-slate-900 dark:text-white">
             Buat Postingan Baru
           </h3>
@@ -64,7 +123,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
           {/* User badge */}
           <div className="flex items-center gap-3">
             <img
@@ -142,45 +201,156 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
             />
           </div>
 
-          {/* Media Presets */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
+          {/* File Attachment & Upload Section */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Lampirkan Bukti / Foto Belajar:
+                Unggah dari Komputer / Galeri:
               </label>
-              {selectedImage && (
+              {(selectedImage || selectedVideo || selectedFile) && (
                 <button
                   type="button"
-                  onClick={() => setSelectedImage(null)}
-                  className="text-xs text-red-500 hover:underline"
+                  onClick={handleClearAttachments}
+                  className="text-xs text-red-500 hover:underline font-semibold"
                 >
-                  Hapus Foto
+                  Hapus Lampiran
                 </button>
               )}
             </div>
 
-            <div className="grid grid-cols-4 gap-2">
-              {PRESET_POST_IMAGES.map((item) => {
-                const isSelected = selectedImage === item.url;
-                return (
-                  <button
-                    key={item.url}
-                    type="button"
-                    onClick={() => setSelectedImage(isSelected ? null : item.url)}
-                    className={`relative h-16 rounded-lg overflow-hidden border-2 transition-all ${
-                      isSelected ? 'border-[#1877F2] scale-102 shadow-sm' : 'border-transparent opacity-70 hover:opacity-100'
-                    }`}
-                  >
-                    <img src={item.url} alt={item.label} className="w-full h-full object-cover" />
-                    {isSelected && (
-                      <div className="absolute inset-0 bg-[#1877F2]/40 flex items-center justify-center">
-                        <Check className="w-4 h-4 text-white" />
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
+            {/* Upload Buttons Bar */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Upload Foto/Gambar */}
+              <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-blue-50 dark:bg-blue-950/40 text-[#1877F2] dark:text-blue-300 hover:bg-blue-100 transition-colors border border-blue-200 dark:border-blue-900">
+                <Image className="w-4 h-4" />
+                <span>Foto / Gambar</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleMediaUpload}
+                  disabled={isUploading}
+                  className="hidden"
+                />
+              </label>
+
+              {/* Upload Video */}
+              <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 hover:bg-red-100 transition-colors border border-red-200 dark:border-red-900">
+                <Video className="w-4 h-4" />
+                <span>Video (.mp4/.mov)</span>
+                <input
+                  type="file"
+                  accept="video/mp4,video/webm,video/quicktime,video/*"
+                  onChange={handleMediaUpload}
+                  disabled={isUploading}
+                  className="hidden"
+                />
+              </label>
+
+              {/* Upload Dokumen */}
+              <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 transition-colors border border-amber-200 dark:border-amber-900">
+                <FileText className="w-4 h-4" />
+                <span>Dokumen (PDF/Doc)</span>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx"
+                  onChange={handleMediaUpload}
+                  disabled={isUploading}
+                  className="hidden"
+                />
+              </label>
             </div>
+
+            {/* Attachment Preview Card */}
+            {isUploading && (
+              <div className="flex items-center gap-2 p-3 bg-slate-50 dark:bg-[#18191a] rounded-xl border border-slate-200 dark:border-[#3e4042]">
+                <Loader2 className="w-4 h-4 animate-spin text-[#1877F2]" />
+                <span className="text-xs text-slate-600 dark:text-slate-400">
+                  Mengunggah berkas ke sistem...
+                </span>
+              </div>
+            )}
+
+            {selectedImage && !isUploading && (
+              <div className="relative rounded-xl overflow-hidden border border-slate-300 dark:border-[#3e4042] max-h-56 bg-black flex items-center justify-center">
+                <img src={selectedImage} alt="Lampiran postingan" className="w-full h-full max-h-56 object-contain" />
+                <button
+                  type="button"
+                  onClick={() => setSelectedImage(null)}
+                  className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-black text-white rounded-full transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {selectedVideo && !isUploading && (
+              <div className="relative rounded-xl overflow-hidden border border-slate-300 dark:border-[#3e4042] max-h-56 bg-black flex items-center justify-center">
+                <video src={selectedVideo} controls className="w-full h-full max-h-56 object-contain" />
+                <button
+                  type="button"
+                  onClick={() => setSelectedVideo(null)}
+                  className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-black text-white rounded-full transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {selectedFile && !isUploading && (
+              <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-[#18191a] rounded-xl border border-slate-200 dark:border-[#3e4042]">
+                <div className="flex items-center gap-3 truncate">
+                  <div className="w-9 h-9 rounded-lg bg-red-100 dark:bg-red-950/60 text-red-600 flex items-center justify-center shrink-0">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div className="truncate">
+                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      {selectedFile.name}
+                    </p>
+                    <p className="text-[10px] text-slate-500">
+                      {selectedFile.size || 'Dokumen lampiran'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedFile(null)}
+                  className="p-1 text-slate-400 hover:text-red-500"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Presets Gallery as optional fallback */}
+            {!selectedImage && !selectedVideo && !selectedFile && (
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1.5">
+                  Atau pilih dari koleksi foto sekolah:
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {PRESET_POST_IMAGES.map((item) => {
+                    const isSelected = selectedImage === item.url;
+                    return (
+                      <button
+                        key={item.url}
+                        type="button"
+                        onClick={() => setSelectedImage(isSelected ? null : item.url)}
+                        className={`relative h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                          isSelected ? 'border-[#1877F2] scale-102 shadow-sm' : 'border-transparent opacity-70 hover:opacity-100'
+                        }`}
+                      >
+                        <img src={item.url} alt={item.label} className="w-full h-full object-cover" />
+                        {isSelected && (
+                          <div className="absolute inset-0 bg-[#1877F2]/40 flex items-center justify-center">
+                            <Check className="w-4 h-4 text-white" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Actions */}
@@ -194,10 +364,10 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={!content.trim() && !selectedImage}
+              disabled={isUploading || (!content.trim() && !selectedImage && !selectedVideo && !selectedFile)}
               className="px-6 py-2 text-xs font-bold text-white bg-[#1877F2] hover:bg-[#166fe5] disabled:opacity-40 disabled:cursor-not-allowed rounded-xl shadow-sm transition-colors"
             >
-              Posting
+              {isUploading ? 'Mengunggah...' : 'Posting'}
             </button>
           </div>
         </form>

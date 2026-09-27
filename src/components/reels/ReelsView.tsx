@@ -11,10 +11,16 @@ import {
   MoreVertical,
   Trash2,
   Edit,
+  Upload,
+  Loader2,
+  Check,
+  Image as ImageIcon,
+  FileVideo,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { ReelItem } from '../../types';
 import { CommentDrawer } from '../modals/CommentDrawer';
+import { SupabaseSyncService } from '../../services/supabaseSyncService';
 
 export const ReelsView: React.FC = () => {
   const { currentUser, reels, users, toggleLikeReel, addReel, deleteReel } = useApp();
@@ -37,17 +43,66 @@ export const ReelsView: React.FC = () => {
   const [newThumbnail, setNewThumbnail] = useState(
     'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&q=80&w=800'
   );
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [uploadedVideoName, setUploadedVideoName] = useState<string | null>(null);
+  const [isUploadingThumb, setIsUploadingThumb] = useState(false);
+  const [uploadedThumbName, setUploadedThumbName] = useState<string | null>(null);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadedVideoName(file.name);
+    setIsUploadingVideo(true);
+
+    try {
+      const url = await SupabaseSyncService.instance.uploadMedia(file, 'reels');
+      setNewVideoUrl(url);
+
+      // Try estimating or reading video duration
+      const tempVideo = document.createElement('video');
+      tempVideo.src = url;
+      tempVideo.onloadedmetadata = () => {
+        const sec = Math.round(tempVideo.duration);
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        setNewDuration(`${m}:${s < 10 ? '0' : ''}${s}`);
+      };
+    } catch (err) {
+      console.error('Gagal mengunggah video reel:', err);
+    } finally {
+      setIsUploadingVideo(false);
+    }
+  };
+
+  const handleThumbUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadedThumbName(file.name);
+    setIsUploadingThumb(true);
+
+    try {
+      const url = await SupabaseSyncService.instance.uploadMedia(file, 'thumbnails');
+      setNewThumbnail(url);
+    } catch (err) {
+      console.error('Gagal mengunggah thumbnail:', err);
+    } finally {
+      setIsUploadingThumb(false);
+    }
+  };
 
   const handleCreateReel = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) return;
+    if (!newTitle.trim() || isUploadingVideo) return;
 
     addReel({
       authorId: currentUser?.id || 'u3',
       title: newTitle.trim(),
       subject: newSubject.trim(),
       description: newDescription.trim(),
-      duration: newDuration.trim(),
+      duration: newDuration.trim() || '1:00',
       thumbnailUrl: newThumbnail,
       isVideo: true,
       videoUrl: newVideoUrl,
@@ -56,6 +111,8 @@ export const ReelsView: React.FC = () => {
     setShowCreateModal(false);
     setNewTitle('');
     setNewDescription('');
+    setUploadedVideoName(null);
+    setUploadedThumbName(null);
   };
 
   return (
@@ -235,10 +292,11 @@ export const ReelsView: React.FC = () => {
       {/* Create Reel Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
-          <div className="relative w-full max-w-lg bg-white dark:bg-[#242526] rounded-2xl shadow-2xl border border-slate-200 dark:border-[#3e4042] overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-[#3e4042]">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Buat Reel Edukasi Baru
+          <div className="relative w-full max-w-lg bg-white dark:bg-[#242526] rounded-2xl shadow-2xl border border-slate-200 dark:border-[#3e4042] overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-[#3e4042] shrink-0">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <FileVideo className="w-5 h-5 text-red-500" />
+                <span>Buat Reel Edukasi Baru</span>
               </h3>
               <button
                 onClick={() => setShowCreateModal(false)}
@@ -248,10 +306,58 @@ export const ReelsView: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateReel} className="p-6 space-y-4">
+            <form onSubmit={handleCreateReel} className="p-6 space-y-4 overflow-y-auto flex-1">
+              {/* Unggah Video dari Komputer / Galeri */}
+              <div className="p-4 bg-red-50/60 dark:bg-red-950/20 border-2 border-dashed border-red-500/40 rounded-2xl text-center space-y-2">
+                <input
+                  type="file"
+                  id="reel-video-upload"
+                  accept="video/mp4,video/webm,video/quicktime,video/*"
+                  onChange={handleVideoUpload}
+                  className="hidden"
+                  disabled={isUploadingVideo}
+                />
+                <label
+                  htmlFor="reel-video-upload"
+                  className="cursor-pointer inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs bg-red-600 hover:bg-red-700 text-white shadow-sm transition-all active:scale-95"
+                >
+                  {isUploadingVideo ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Mengunggah Video...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      <span>Pilih Video dari Komputer / Galeri</span>
+                    </>
+                  )}
+                </label>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Format video didukung: MP4, WebM, MOV (Video landscape maupun portrait)
+                </p>
+                {uploadedVideoName && (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[11px] font-semibold rounded-full mt-1">
+                    <Check className="w-3.5 h-3.5" />
+                    <span className="truncate max-w-xs">{uploadedVideoName}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Video Player Preview */}
+              {newVideoUrl && (
+                <div className="relative w-full h-44 rounded-xl overflow-hidden bg-black border border-slate-700 flex items-center justify-center shadow-inner">
+                  <video
+                    src={newVideoUrl}
+                    controls
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Judul Video / Topik Reel
+                  Judul Video / Topik Reel *
                 </label>
                 <input
                   type="text"
@@ -259,7 +365,7 @@ export const ReelsView: React.FC = () => {
                   onChange={(e) => setNewTitle(e.target.value)}
                   placeholder="cth: Eksperimen Reaksi Fotosintesis"
                   required
-                  className="w-full bg-white dark:bg-[#3a3b3c] border border-slate-300 dark:border-[#3e4042] rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-hidden"
+                  className="w-full bg-white dark:bg-[#3a3b3c] border border-slate-300 dark:border-[#3e4042] rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-hidden focus:border-red-500"
                 />
               </div>
 
@@ -303,17 +409,56 @@ export const ReelsView: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  URL Video (.mp4)
+              {/* Unggah Gambar Sampul (Thumbnail) */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Gambar Sampul (Thumbnail):
                 </label>
-                <input
-                  type="url"
-                  value={newVideoUrl}
-                  onChange={(e) => setNewVideoUrl(e.target.value)}
-                  className="w-full bg-white dark:bg-[#3a3b3c] border border-slate-300 dark:border-[#3e4042] rounded-xl px-3 py-2 text-xs"
-                />
+                <div className="flex items-center gap-3">
+                  <div className="w-16 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 overflow-hidden shrink-0 flex items-center justify-center">
+                    <img src={newThumbnail} alt="Thumbnail" className="w-full h-full object-cover" />
+                  </div>
+                  <div className="flex-1 flex items-center gap-2">
+                    <input
+                      type="file"
+                      id="thumb-file-upload"
+                      accept="image/*"
+                      onChange={handleThumbUpload}
+                      className="hidden"
+                      disabled={isUploadingThumb}
+                    />
+                    <label
+                      htmlFor="thumb-file-upload"
+                      className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-[#3a3b3c] hover:bg-slate-200 dark:hover:bg-[#4e4f50] text-slate-700 dark:text-slate-200"
+                    >
+                      {isUploadingThumb ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImageIcon className="w-3.5 h-3.5" />}
+                      <span>Ganti Gambar Sampul</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowUrlInput(!showUrlInput)}
+                      className="text-xs text-slate-500 hover:underline"
+                    >
+                      {showUrlInput ? 'Sembunyikan URL' : 'Opsi URL'}
+                    </button>
+                  </div>
+                </div>
               </div>
+
+              {showUrlInput && (
+                <div className="p-3 bg-slate-50 dark:bg-[#18191a] rounded-xl border border-slate-200 dark:border-[#3e4042] space-y-2">
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                    Atau Masukkan Tautan Video Web (.mp4 langsung):
+                  </label>
+                  <input
+                    type="url"
+                    value={newVideoUrl}
+                    onChange={(e) => setNewVideoUrl(e.target.value)}
+                    placeholder="https://.../video.mp4"
+                    className="w-full bg-white dark:bg-[#3a3b3c] border border-slate-300 dark:border-[#3e4042] rounded-xl px-3 py-2 text-xs"
+                  />
+                </div>
+              )}
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-[#3e4042]">
                 <button
@@ -325,9 +470,10 @@ export const ReelsView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl"
+                  disabled={isUploadingVideo || !newTitle.trim()}
+                  className="px-5 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-xl shadow-sm transition-colors"
                 >
-                  Terbitkan Reel
+                  {isUploadingVideo ? 'Mengunggah Video...' : 'Terbitkan Reel'}
                 </button>
               </div>
             </form>
