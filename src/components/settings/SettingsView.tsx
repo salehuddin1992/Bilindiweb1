@@ -13,8 +13,12 @@ import {
   Code,
   X,
   Copy,
+  Upload,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { SupabaseSyncService } from '../../services/supabaseSyncService';
 
 export const SettingsView: React.FC = () => {
   const {
@@ -37,6 +41,69 @@ export const SettingsView: React.FC = () => {
   const [showSqlModal, setShowSqlModal] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isUpdatingLogo, setIsUpdatingLogo] = useState(false);
+  const [logoMsg, setLogoMsg] = useState<string | null>(null);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [customLogoUrlInput, setCustomLogoUrlInput] = useState('');
+
+  const handleRefreshLogoFromDb = async () => {
+    setIsUpdatingLogo(true);
+    setLogoMsg(null);
+    try {
+      const dbLogo = await SupabaseSyncService.instance.fetchAppLogo();
+      if (dbLogo) {
+        await updateAppLogo(dbLogo);
+        setLogoMsg('Logo berhasil disinkronkan dari database Supabase!');
+      } else {
+        setLogoMsg('Logo aktif saat ini sudah sesuai dengan database.');
+      }
+    } catch {
+      setLogoMsg('Gagal memuat logo dari database Supabase.');
+    } finally {
+      setIsUpdatingLogo(false);
+      setTimeout(() => setLogoMsg(null), 4000);
+    }
+  };
+
+  const handleFileUploadLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUpdatingLogo(true);
+    setLogoMsg(null);
+    try {
+      const uploadedUrl = await SupabaseSyncService.instance.uploadMedia(file, 'logo');
+      if (uploadedUrl) {
+        await updateAppLogo(uploadedUrl);
+        setLogoMsg('Logo berhasil diunggah dan disimpan ke database Supabase!');
+      } else {
+        setLogoMsg('Gagal mengunggah logo ke Supabase storage.');
+      }
+    } catch {
+      setLogoMsg('Terjadi kesalahan saat mengunggah logo.');
+    } finally {
+      setIsUpdatingLogo(false);
+      setTimeout(() => setLogoMsg(null), 4000);
+    }
+  };
+
+  const handleSaveCustomUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customLogoUrlInput.trim()) return;
+    setIsUpdatingLogo(true);
+    setLogoMsg(null);
+    try {
+      await updateAppLogo(customLogoUrlInput.trim());
+      setLogoMsg('Tautan logo berhasil disimpan ke database!');
+      setShowUrlInput(false);
+      setCustomLogoUrlInput('');
+    } catch {
+      setLogoMsg('Gagal menyimpan tautan logo.');
+    } finally {
+      setIsUpdatingLogo(false);
+      setTimeout(() => setLogoMsg(null), 4000);
+    }
+  };
 
   // Password fields
   const [oldPassword, setOldPassword] = useState('');
@@ -104,34 +171,102 @@ export const SettingsView: React.FC = () => {
       {/* 1. App Logo Branding (For Teachers / Principals) */}
       {isTeacherOrAdmin && (
         <div className="bg-white dark:bg-[#242526] rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-[#3e4042] space-y-4">
-          <div className="flex items-center gap-2.5">
-            <School className="w-5 h-5 text-[#1877F2]" />
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Logo Aplikasi & Identitas Sekolah
-              </h3>
-              <p className="text-xs text-slate-500">
-                Menu Pendidik: Pilih lambang resmi SMP Negeri Sinombayuga
-              </p>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2.5">
+              <School className="w-5 h-5 text-[#1877F2]" />
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Logo Aplikasi & Identitas Sekolah
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Terhubung ke Basis Data Supabase · Berlaku untuk seluruh sistem & surat dinas
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleRefreshLogoFromDb}
+                disabled={isUpdatingLogo}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-[#18191a] hover:bg-slate-200 dark:hover:bg-[#3a3b3c] text-slate-700 dark:text-slate-300 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isUpdatingLogo ? 'animate-spin text-[#1877F2]' : ''}`} />
+                Segarkan dari DB
+              </button>
             </div>
           </div>
 
+          {logoMsg && (
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 text-xs font-semibold rounded-xl border border-emerald-200 dark:border-emerald-800 flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{logoMsg}</span>
+            </div>
+          )}
+
           <div className="flex items-center gap-4 p-3 bg-slate-50 dark:bg-[#18191a] rounded-xl border border-slate-200 dark:border-[#3e4042]">
             <div className="w-16 h-16 rounded-2xl bg-white dark:bg-[#242526] border border-slate-200 dark:border-[#3e4042] flex items-center justify-center p-1 shadow-xs overflow-hidden shrink-0">
-              <img src="/ic_logo_bilindi.jpg" alt="Logo BilindiWall" className="w-full h-full object-contain" />
+              <img
+                src={appLogoUrl || './ic_logo_bilindi.jpg'}
+                alt="Logo BilindiWall"
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = './ic_logo_bilindi.jpg';
+                }}
+              />
             </div>
-            <div className="flex-1 text-xs">
-              <div className="flex items-center gap-2">
+            <div className="flex-1 text-xs space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-bold text-slate-900 dark:text-white block">
-                  Logo Resmi BilindiWall
+                  Logo Aktif (Basis Data)
                 </span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px]">
-                  🔒 Terkunci Permanen
+                <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-bold text-[10px]">
+                  🌐 Supabase Connected
                 </span>
               </div>
-              <p className="text-slate-500 mt-1 leading-relaxed">
-                Berkas <strong>ic_logo_bilindi.jpg</strong> diterapkan secara permanen di seluruh sistem: bar navigasi atas, kartu masuk (login), tab browser, dan surat dinas modul ajar.
+              <p className="text-slate-500 leading-relaxed">
+                Logo diambil langsung dari tabel dan storage Supabase. Guru & Kepala Sekolah dapat memperbarui berkas logo baru kapan saja.
               </p>
+
+              <div className="flex items-center gap-2 pt-1 flex-wrap">
+                <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#1877F2] hover:bg-[#166fe5] text-white shadow-xs transition-colors">
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>{isUpdatingLogo ? 'Memproses...' : 'Unggah Logo Baru'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileUploadLogo}
+                    disabled={isUpdatingLogo}
+                    className="hidden"
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() => setShowUrlInput(!showUrlInput)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white dark:bg-[#242526] border border-slate-200 dark:border-[#3e4042] hover:bg-slate-50 dark:hover:bg-[#3a3b3c] text-slate-700 dark:text-slate-300 transition-colors"
+                >
+                  {showUrlInput ? 'Tutup URL' : 'Tautkan URL'}
+                </button>
+              </div>
+
+              {showUrlInput && (
+                <form onSubmit={handleSaveCustomUrl} className="flex gap-2 pt-2">
+                  <input
+                    type="url"
+                    placeholder="https://.../logo.png"
+                    value={customLogoUrlInput}
+                    onChange={(e) => setCustomLogoUrlInput(e.target.value)}
+                    className="flex-1 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-[#3e4042] bg-white dark:bg-[#242526] text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#1877F2]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isUpdatingLogo || !customLogoUrlInput.trim()}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold disabled:opacity-50"
+                  >
+                    Simpan ke DB
+                  </button>
+                </form>
+              )}
             </div>
           </div>
         </div>

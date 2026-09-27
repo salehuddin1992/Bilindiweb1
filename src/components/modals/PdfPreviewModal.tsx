@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { FileText, X, ZoomIn, ZoomOut, ArrowLeft, ArrowRight, Download, CheckCircle, School } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
 
 interface PdfPreviewModalProps {
   documentTitle: string;
@@ -18,6 +19,7 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
   subject = 'IPA / Modul Ajar',
   onDismiss,
 }) => {
+  const { appLogoUrl } = useApp();
   const [currentPage, setCurrentPage] = useState(1);
   const [zoomScale, setZoomScale] = useState(1.0);
 
@@ -107,7 +109,7 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
                 <div className="flex items-center gap-3 border-b-2 border-black pb-3">
                   <div className="w-13 h-13 rounded-xl bg-white border border-slate-300 p-0.5 flex items-center justify-center shrink-0 shadow-xs">
                     <img
-                      src="/ic_logo_bilindi.jpg"
+                      src={appLogoUrl || './ic_logo_bilindi.jpg'}
                       alt="Logo SMP Negeri Sinombayuga"
                       className="w-full h-full object-contain"
                     />

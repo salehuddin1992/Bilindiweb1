@@ -380,4 +380,93 @@ export class SupabaseSyncService {
       return [];
     }
   }
+
+  /**
+   * Fetch official school/app logo from Supabase database or storage
+   */
+  async fetchAppLogo(): Promise<string | null> {
+    try {
+      // 1. Cek tabel konfigurasi 'app_settings'
+      const { data: appSet, error: err1 } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'app_logo')
+        .maybeSingle();
+
+      if (!err1 && appSet?.value) {
+        return appSet.value;
+      }
+
+      // 2. Cek tabel konfigurasi 'settings'
+      const { data: set, error: err2 } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'app_logo')
+        .maybeSingle();
+
+      if (!err2 && set?.value) {
+        return set.value;
+      }
+
+      // 3. Cek file logo di Supabase Storage 'media_belajar/logo'
+      const { data: files } = await supabase.storage.from(BUCKET_NAME).list('logo');
+      if (files && files.length > 0) {
+        const logoFile = files.find((f) => f.name.includes('logo') || f.name.includes('bilindi')) || files[0];
+        if (logoFile) {
+          const { data: pubData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(`logo/${logoFile.name}`);
+          if (pubData?.publicUrl) {
+            return pubData.publicUrl;
+          }
+        }
+      }
+
+      // 4. Cek root Supabase Storage 'media_belajar' untuk berkas logo
+      const { data: rootFiles } = await supabase.storage.from(BUCKET_NAME).list();
+      if (rootFiles && rootFiles.length > 0) {
+        const rootLogo = rootFiles.find((f) => f.name.toLowerCase().includes('logo') || f.name.toLowerCase().includes('bilindi'));
+        if (rootLogo) {
+          const { data: pubData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(rootLogo.name);
+          if (pubData?.publicUrl) {
+            return pubData.publicUrl;
+          }
+        }
+      }
+
+      return null;
+    } catch (e) {
+      console.warn('Gagal mengambil logo dari database Supabase:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Save official logo to Supabase database (app_settings & settings)
+   */
+  async saveAppLogo(logoUrl: string): Promise<boolean> {
+    try {
+      let saved = false;
+
+      // Coba simpan ke app_settings
+      try {
+        const { error: err1 } = await supabase
+          .from('app_settings')
+          .upsert({ key: 'app_logo', value: logoUrl, updated_at: new Date().toISOString() });
+        if (!err1) saved = true;
+      } catch {}
+
+      // Coba simpan ke settings
+      try {
+        const { error: err2 } = await supabase
+          .from('settings')
+          .upsert({ key: 'app_logo', value: logoUrl });
+        if (!err2) saved = true;
+      } catch {}
+
+      return saved;
+    } catch (e) {
+      console.warn('Gagal menyimpan logo ke database Supabase:', e);
+      return false;
+    }
+  }
 }
+

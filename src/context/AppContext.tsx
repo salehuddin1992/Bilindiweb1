@@ -189,7 +189,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 
   const [appLogoUrl, setAppLogoUrl] = useState<string>(() =>
-    safeGet(STORAGE_KEYS.APP_LOGO, '/ic_logo_bilindi.jpg') || '/ic_logo_bilindi.jpg'
+    safeGet(STORAGE_KEYS.APP_LOGO, './ic_logo_bilindi.jpg') || './ic_logo_bilindi.jpg'
   );
 
   // Sync dark mode class to html element
@@ -352,6 +352,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     initSupabaseSession();
 
+    // Ambil logo resmi sekolah/aplikasi langsung dari database Supabase
+    const loadLogoFromDatabase = async () => {
+      try {
+        const dbLogo = await SupabaseSyncService.instance.fetchAppLogo();
+        if (dbLogo) {
+          setAppLogoUrl(dbLogo);
+          localStorage.setItem(STORAGE_KEYS.APP_LOGO, dbLogo);
+        }
+      } catch (err) {
+        console.warn('Gagal memuat logo dari database Supabase:', err);
+      }
+    };
+
+    loadLogoFromDatabase();
+
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT') {
         setCurrentUserId(null);
@@ -368,7 +383,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const toggleDarkMode = () => setIsDarkMode((prev) => !prev);
   const setDarkMode = (val: boolean) => setIsDarkMode(val);
-  const updateAppLogo = (url: string | null) => setAppLogoUrl(url || '/ic_logo_bilindi.jpg');
+  const updateAppLogo = async (url: string | null) => {
+    const finalUrl = url || './ic_logo_bilindi.jpg';
+    setAppLogoUrl(finalUrl);
+    localStorage.setItem(STORAGE_KEYS.APP_LOGO, finalUrl);
+    try {
+      await SupabaseSyncService.instance.saveAppLogo(finalUrl);
+    } catch (e) {
+      console.warn('Gagal menyimpan logo ke database:', e);
+    }
+  };
 
   const addPost = (postData: Partial<Post>): Post => {
     const isStudent = currentUser?.role === 'STUDENT';
